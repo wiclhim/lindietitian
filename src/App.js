@@ -73,6 +73,7 @@ import {
   User,
   Download,
   FileJson,
+  AlertTriangle,
 } from "lucide-react";
 
 // --- Firebase Configuration & Initialization ---
@@ -464,8 +465,10 @@ const Sidebar = ({
   setActiveTab,
   onImport,
   onExport,
+  onReset,
   importing,
   exporting,
+  resetting,
   userEmail,
 }) => {
   const fileInputRef = useRef(null);
@@ -519,12 +522,16 @@ const Sidebar = ({
           <button
             key={item.id}
             onClick={() => setActiveTab(item.id)}
-            disabled={importing || exporting}
+            disabled={importing || exporting || resetting}
             className={`flex items-center gap-3 px-4 py-3 rounded-lg w-full transition-colors whitespace-nowrap md:whitespace-normal shrink-0 ${
               activeTab === item.id
                 ? "bg-emerald-600 text-white shadow-lg"
                 : "text-slate-300 hover:bg-slate-700"
-            } ${importing || exporting ? "opacity-50 cursor-not-allowed" : ""}`}
+            } ${
+              importing || exporting || resetting
+                ? "opacity-50 cursor-not-allowed"
+                : ""
+            }`}
           >
             <item.icon className="w-5 h-5" />
             {item.label}
@@ -535,9 +542,11 @@ const Sidebar = ({
           {/* Export Button */}
           <button
             onClick={onExport}
-            disabled={exporting || importing}
+            disabled={exporting || importing || resetting}
             className={`flex items-center gap-3 px-4 py-3 rounded-lg w-full text-blue-300 hover:bg-slate-700 transition-colors border border-dashed border-slate-600 hover:border-blue-300 whitespace-nowrap ${
-              importing || exporting ? "opacity-50 cursor-not-allowed" : ""
+              importing || exporting || resetting
+                ? "opacity-50 cursor-not-allowed"
+                : ""
             }`}
           >
             {exporting ? (
@@ -550,10 +559,14 @@ const Sidebar = ({
 
           {/* Import Button */}
           <button
-            onClick={() => !importing && fileInputRef.current.click()}
-            disabled={importing || exporting}
+            onClick={() =>
+              !importing && !resetting && fileInputRef.current.click()
+            }
+            disabled={importing || exporting || resetting}
             className={`flex items-center gap-3 px-4 py-3 rounded-lg w-full text-amber-300 hover:bg-slate-700 transition-colors border border-dashed border-slate-600 hover:border-amber-300 whitespace-nowrap ${
-              importing || exporting ? "opacity-50 cursor-not-allowed" : ""
+              importing || exporting || resetting
+                ? "opacity-50 cursor-not-allowed"
+                : ""
             }`}
           >
             {importing ? (
@@ -571,9 +584,27 @@ const Sidebar = ({
             className="hidden"
           />
 
+          {/* Reset Database Button (Dangerous Action) */}
+          <button
+            onClick={onReset}
+            disabled={importing || exporting || resetting}
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg w-full text-red-400 hover:bg-red-900/30 hover:text-red-200 transition-colors border border-dashed border-slate-600 hover:border-red-400 whitespace-nowrap ${
+              importing || exporting || resetting
+                ? "opacity-50 cursor-not-allowed"
+                : ""
+            }`}
+          >
+            {resetting ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <AlertTriangle className="w-5 h-5" />
+            )}
+            {resetting ? "清除中..." : "清空/重置資料庫"}
+          </button>
+
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-3 rounded-lg w-full text-red-300 hover:bg-red-900/30 transition-colors whitespace-nowrap"
+            className="flex items-center gap-3 px-4 py-3 rounded-lg w-full text-slate-400 hover:bg-slate-700 transition-colors whitespace-nowrap mt-4"
           >
             <LogOut className="w-5 h-5" />
             登出系統
@@ -1941,6 +1972,7 @@ export default function App() {
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [resetting, setResetting] = useState(false); // New resetting state
   const [dialogConfig, setDialogConfig] = useState({
     show: false,
     type: "alert",
@@ -1989,6 +2021,85 @@ export default function App() {
         await deleteDoc(
           doc(db, "artifacts", appId, "users", user.uid, "transactions", id)
         );
+      },
+    });
+  };
+
+  // --- NEW: Reset Database Function (Clear All) ---
+  const handleReset = async () => {
+    if (!user) return;
+    setDialogConfig({
+      show: true,
+      type: "confirm",
+      title: "⚠️ 危險操作：清空所有資料",
+      content:
+        "您確定要「清空」所有記帳資料嗎？\n\n此動作將會刪除此帳號下所有的交易紀錄，且無法復原！\n\n如果您只是重複匯入，建議先匯出備份後再執行此操作。\n\n執行後，系統將變回全新狀態。",
+      confirmText: "確定清空 (無法復原)",
+      onConfirm: async () => {
+        setResetting(true);
+        try {
+          const q = query(
+            collection(
+              db,
+              "artifacts",
+              appId,
+              "users",
+              user.uid,
+              "transactions"
+            )
+          );
+          const snapshot = await getDocs(q);
+
+          if (snapshot.empty) {
+            setDialogConfig({
+              show: true,
+              type: "alert",
+              title: "資料庫已空",
+              content: "目前沒有任何資料需要刪除。",
+              confirmText: "好的",
+            });
+            return;
+          }
+
+          const batches = [];
+          let batch = writeBatch(db);
+          let count = 0;
+          const BATCH_SIZE = 450;
+
+          snapshot.docs.forEach((doc) => {
+            batch.delete(doc.ref);
+            count++;
+            if (count % BATCH_SIZE === 0) {
+              batches.push(batch);
+              batch = writeBatch(db);
+            }
+          });
+
+          if (count % BATCH_SIZE !== 0) {
+            batches.push(batch);
+          }
+
+          await Promise.all(batches.map((b) => b.commit()));
+
+          setDialogConfig({
+            show: true,
+            type: "alert",
+            title: "重置成功",
+            content: "✅ 資料庫已完全清空，現在是全新狀態。",
+            confirmText: "太棒了",
+          });
+        } catch (error) {
+          console.error("Reset failed", error);
+          setDialogConfig({
+            show: true,
+            type: "alert",
+            title: "重置失敗",
+            content: "刪除過程中發生錯誤，請稍後再試。",
+            confirmText: "關閉",
+          });
+        } finally {
+          setResetting(false);
+        }
       },
     });
   };
@@ -2285,8 +2396,10 @@ export default function App() {
         setActiveTab={setActiveTab}
         onImport={handleImport}
         onExport={handleExport}
+        onReset={handleReset}
         importing={importing}
         exporting={exporting}
+        resetting={resetting}
         userEmail={user.email}
       />
       <main className="flex-1 overflow-y-auto h-screen relative">
