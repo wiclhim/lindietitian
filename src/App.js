@@ -1435,8 +1435,9 @@ const Ledger = ({
   );
 };
 
-// Analysis (No changes)
+// --- Analysis Component (Fixed) ---
 const Analysis = ({ transactions, dateRange, setDateRange }) => {
+  // 1. 總計與圓餅圖數據計算
   const { totalRevenue, totalExpense, costData, revStats, filteredCount } =
     useMemo(() => {
       let stats = {
@@ -1451,7 +1452,20 @@ const Analysis = ({ transactions, dateRange, setDateRange }) => {
       let totalRevenue = 0;
       let totalExpense = 0;
 
+      // 防呆：確保 transactions 是陣列
+      if (!Array.isArray(transactions)) {
+        return {
+          totalRevenue: 0,
+          totalExpense: 0,
+          costData: [],
+          revStats: { self: 0, platform: 0, total: 0 },
+          filteredCount: 0,
+        };
+      }
+
       const filtered = transactions.filter((t) => {
+        // 防呆：如果沒有日期，直接過濾掉
+        if (!t || !t.date) return false;
         if (dateRange.start && t.date < dateRange.start) return false;
         if (dateRange.end && t.date > dateRange.end) return false;
         return true;
@@ -1509,9 +1523,14 @@ const Analysis = ({ transactions, dateRange, setDateRange }) => {
       };
     }, [transactions, dateRange]);
 
+  // 2. 每月趨勢圖數據計算
   const monthlyData = useMemo(() => {
+    if (!Array.isArray(transactions)) return []; // 防呆
+
     const grouped = {};
     const filtered = transactions.filter((t) => {
+      // 防呆：檢查日期是否存在且為字串
+      if (!t || !t.date || typeof t.date !== "string") return false;
       if (dateRange.start && t.date < dateRange.start) return false;
       if (dateRange.end && t.date > dateRange.end) return false;
       return true;
@@ -1520,22 +1539,35 @@ const Analysis = ({ transactions, dateRange, setDateRange }) => {
     filtered.forEach((t) => {
       if (NON_PROFIT_CODES.includes(t.categoryCode)) return;
 
-      const month = t.date.substring(0, 7);
-      if (!grouped[month])
-        grouped[month] = { month, income: 0, expense: 0, profit: 0 };
-      const amt = parseFloat(t.amount) || 0;
-      if (t.type === "income") grouped[month].income += amt;
-      else grouped[month].expense += amt;
+      // 防呆：再次確保 substring 不會報錯
+      try {
+        const month = t.date.substring(0, 7);
+        if (!grouped[month])
+          grouped[month] = { month, income: 0, expense: 0, profit: 0 };
+
+        const amt = parseFloat(t.amount) || 0;
+        if (t.type === "income") grouped[month].income += amt;
+        else grouped[month].expense += amt;
+      } catch (e) {
+        console.warn("Skipping invalid transaction data", t);
+      }
     });
+
     return Object.values(grouped)
       .map((i) => ({ ...i, profit: i.income - i.expense }))
       .sort((a, b) => a.month.localeCompare(b.month));
   }, [transactions, dateRange]);
 
+  // 3. P&L 報表數據計算
   const monthlyReport = useMemo(() => {
+    if (!Array.isArray(transactions)) return []; // 防呆
+
     const stats = {};
 
     transactions.forEach((t) => {
+      // 防呆：關鍵修復點
+      if (!t || !t.date || typeof t.date !== "string") return;
+
       if (NON_PROFIT_CODES.includes(t.categoryCode)) return;
       if (dateRange.start && t.date < dateRange.start) return;
       if (dateRange.end && t.date > dateRange.end) return;
@@ -1582,7 +1614,8 @@ const Analysis = ({ transactions, dateRange, setDateRange }) => {
           (c === "209" && (sub.includes("food") || sub.includes("uber")))
         )
           stats[month].costPlatform += amt;
-        else if (["232", "233"].includes(c)) stats.consumables += amt;
+        else if (["232", "233"].includes(c))
+          stats[month].costConsumables += amt;
         else stats[month].costOthers += amt;
       }
     });
