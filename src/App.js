@@ -74,10 +74,10 @@ import {
   Download,
   FileJson,
   AlertTriangle,
+  Receipt, // 新增圖標
 } from "lucide-react";
 
 // --- Firebase Configuration & Initialization ---
-// 🟢 請確保這邊是您正確的設定
 const firebaseConfig = {
   apiKey: "AIzaSyAV1UWmSiXZCQcp9xDhzV5_moGj66zxP4M",
   authDomain: "lindietitian.firebaseapp.com",
@@ -94,10 +94,20 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = "mumu-production"; // 固定專案名稱
 
-// --- Constants (與原版相同) ---
+// --- Constants ---
 const ACCOUNTS = [
   { id: "cash", name: "零用現金NT", type: "cash" },
   { id: "bank_esun", name: "玉山活存NT", type: "bank" },
+];
+
+// 新增：票據憑證選項
+const PROOF_OPTIONS = [
+  "無憑證",
+  "電子發票",
+  "實體發票",
+  "收據",
+  "銷貨單",
+  "電子憑證",
 ];
 
 const NON_PROFIT_CODES = ["399", "499", "601"];
@@ -495,7 +505,7 @@ const Sidebar = ({
           木木營養食
         </h1>
         <p className="text-xs text-slate-400 mt-1">
-          雲端營收管理系統 v5.1 (安全版)
+          雲端營收管理系統 v5.2 (憑證版)
         </p>
       </div>
 
@@ -794,7 +804,7 @@ const Dashboard = ({ transactions, dateRange, setDateRange }) => {
   );
 };
 
-// EntryForm (No changes)
+// EntryForm (Added Proof Field)
 const EntryForm = ({
   user,
   appId,
@@ -811,6 +821,7 @@ const EntryForm = ({
     subcategory: "",
     amount: "",
     memo: "",
+    proof: "無憑證", // 新增預設值
   });
   const [items, setItems] = useState([{ id: 1, subcategory: "", amount: "" }]);
   const [submitting, setSubmitting] = useState(false);
@@ -828,7 +839,11 @@ const EntryForm = ({
 
   useEffect(() => {
     if (initialData) {
-      setFormData({ ...initialData, amount: initialData.amount.toString() });
+      setFormData({
+        ...initialData,
+        amount: initialData.amount.toString(),
+        proof: initialData.proof || "無憑證", // 兼容舊資料
+      });
       if (
         initialData.details &&
         Array.isArray(initialData.details) &&
@@ -854,6 +869,7 @@ const EntryForm = ({
         subcategory: "",
         amount: "",
         memo: "",
+        proof: "無憑證",
       });
       setItems([{ id: 1, subcategory: "", amount: "" }]);
     }
@@ -916,6 +932,7 @@ const EntryForm = ({
           memo: "",
           subcategory: "",
           amount: "",
+          proof: "無憑證", // 重置憑證
         }));
       }
       setTimeout(() => setMessage(null), 3000);
@@ -1025,33 +1042,51 @@ const EntryForm = ({
                 ))}
               </select>
             </div>
+            {/* 新增憑證選擇欄位 */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                科目
+              <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
+                <Receipt className="w-4 h-4" /> 票據憑證
               </label>
               <select
-                required
-                value={formData.categoryCode}
-                onChange={(e) => {
-                  const c = currentCatList.find(
-                    (x) => x.code === e.target.value
-                  );
-                  setFormData({
-                    ...formData,
-                    categoryCode: e.target.value,
-                    categoryName: c?.name || "",
-                  });
-                }}
-                className="w-full p-3 border rounded-lg bg-white"
+                value={formData.proof}
+                onChange={(e) =>
+                  setFormData({ ...formData, proof: e.target.value })
+                }
+                className="w-full p-3 border rounded-lg bg-white border-blue-200 text-blue-800"
               >
-                <option value="">請選擇...</option>
-                {currentCatList.map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {c.code} {c.name}
+                {PROOF_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
                   </option>
                 ))}
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              科目
+            </label>
+            <select
+              required
+              value={formData.categoryCode}
+              onChange={(e) => {
+                const c = currentCatList.find((x) => x.code === e.target.value);
+                setFormData({
+                  ...formData,
+                  categoryCode: e.target.value,
+                  categoryName: c?.name || "",
+                });
+              }}
+              className="w-full p-3 border rounded-lg bg-white"
+            >
+              <option value="">請選擇...</option>
+              {currentCatList.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.code} {c.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
@@ -1163,7 +1198,7 @@ const EntryForm = ({
   );
 };
 
-// Ledger (No changes)
+// Ledger (Added Proof Column)
 const Ledger = ({
   transactions,
   onDelete,
@@ -1321,6 +1356,9 @@ const Ledger = ({
                   日期
                 </th>
                 <th className="p-4 text-sm font-semibold text-slate-600">
+                  憑證
+                </th>
+                <th className="p-4 text-sm font-semibold text-slate-600">
                   帳戶
                 </th>
                 <th className="p-4 text-sm font-semibold text-slate-600">
@@ -1345,6 +1383,17 @@ const Ledger = ({
                 <tr key={t.id} className="hover:bg-slate-50 group">
                   <td className="p-4 text-slate-800 text-sm whitespace-nowrap">
                     {t.date}
+                  </td>
+                  <td className="p-4 text-slate-600 text-sm">
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs border ${
+                        t.proof && t.proof !== "無憑證"
+                          ? "bg-blue-50 text-blue-600 border-blue-100"
+                          : "bg-slate-100 text-slate-400 border-slate-200"
+                      }`}
+                    >
+                      {t.proof || "-"}
+                    </span>
                   </td>
                   <td className="p-4 text-slate-600 text-sm">
                     <span
@@ -1417,7 +1466,7 @@ const Ledger = ({
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan="7" className="p-12 text-center text-slate-400">
+                  <td colSpan="8" className="p-12 text-center text-slate-400">
                     <div className="flex flex-col items-center">
                       <FileText className="w-12 h-12 mb-2 opacity-20" />
                       <p>沒有找到符合條件的紀錄</p>
