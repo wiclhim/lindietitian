@@ -76,7 +76,7 @@ import {
   AlertTriangle,
   Receipt,
   Menu,
-  MoreHorizontal, // 用於手機版更多選單
+  MoreHorizontal,
 } from "lucide-react";
 
 // --- Firebase Configuration & Initialization ---
@@ -469,7 +469,7 @@ const Dialog = ({ config, onClose }) => {
   );
 };
 
-// --- 重構 Sidebar 為響應式導覽 (Desktop: Sidebar, Mobile: Top + Bottom Bar) ---
+// --- Navigation ---
 const Navigation = ({
   activeTab,
   setActiveTab,
@@ -578,7 +578,7 @@ const Navigation = ({
             木木營養食
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            雲端營收管理系統 v5.2 (憑證版)
+            雲端營收管理系統 v5.3 (Mobile Fix)
           </p>
         </div>
         <div className="p-4 bg-slate-700/50 flex items-center gap-3 border-b border-slate-700">
@@ -755,7 +755,8 @@ const Dashboard = ({ transactions, dateRange, setDateRange }) => {
   }, [transactions, dateRange]);
 
   return (
-    <div className="p-4 md:p-6 space-y-6 bg-slate-50 min-h-screen pb-24 md:pb-6">
+    // PADDING FIX: pt-20 added for mobile
+    <div className="p-4 pt-20 md:p-6 md:pt-6 space-y-6 bg-slate-50 min-h-screen pb-24 md:pb-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <h2 className="text-2xl font-bold text-slate-800">營運總覽</h2>
         <div className="flex flex-col w-full md:w-auto items-end gap-2">
@@ -859,7 +860,7 @@ const Dashboard = ({ transactions, dateRange, setDateRange }) => {
   );
 };
 
-// EntryForm (Grid Optimized for Mobile)
+// EntryForm
 const EntryForm = ({
   user,
   appId,
@@ -999,7 +1000,8 @@ const EntryForm = ({
   };
 
   return (
-    <div className="p-4 md:p-6 bg-slate-50 min-h-screen flex justify-center pb-24 md:pb-6">
+    // PADDING FIX: pt-20 added for mobile
+    <div className="p-4 pt-20 md:p-6 md:pt-6 bg-slate-50 min-h-screen flex justify-center pb-24 md:pb-6">
       <div className="w-full max-w-2xl bg-white rounded-xl shadow-sm border border-slate-200 p-5 md:p-8">
         <h2 className="text-xl md:text-2xl font-bold text-slate-800 mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -1254,7 +1256,7 @@ const EntryForm = ({
   );
 };
 
-// Ledger (Mobile Card View + Desktop Table View)
+// Ledger
 const Ledger = ({
   transactions,
   onDelete,
@@ -1309,7 +1311,8 @@ const Ledger = ({
   }, [filtered]);
 
   return (
-    <div className="p-4 md:p-6 bg-slate-50 min-h-screen pb-24 md:pb-6">
+    // PADDING FIX: pt-20 added for mobile
+    <div className="p-4 pt-20 md:p-6 md:pt-6 bg-slate-50 min-h-screen pb-24 md:pb-6">
       <div className="flex flex-col gap-4 mb-6">
         <div className="flex justify-between items-center flex-wrap gap-4">
           <div>
@@ -1661,7 +1664,7 @@ const Ledger = ({
   );
 };
 
-// Analysis Component (Mobile Padding Optimization)
+// Analysis Component (Mobile Padding + Chart Fix)
 const Analysis = ({ transactions, dateRange, setDateRange }) => {
   // 1. 總計與圓餅圖數據計算
   const { totalRevenue, totalExpense, costData, revStats, filteredCount } =
@@ -1867,7 +1870,8 @@ const Analysis = ({ transactions, dateRange, setDateRange }) => {
   }, [transactions, dateRange]);
 
   return (
-    <div className="p-4 md:p-6 bg-slate-50 min-h-screen pb-24 md:pb-6">
+    // PADDING FIX: pt-20 added for mobile
+    <div className="p-4 pt-20 md:p-6 md:pt-6 bg-slate-50 min-h-screen pb-24 md:pb-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
@@ -2005,7 +2009,8 @@ const Analysis = ({ transactions, dateRange, setDateRange }) => {
       </div>
 
       <div className="grid grid-cols-1 gap-6 mb-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-96 flex flex-col items-center justify-center relative">
+        {/* CHART HEIGHT FIX: h-[500px] added for mobile */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-[500px] md:h-96 flex flex-col items-center justify-center relative">
           <h3 className="text-lg font-bold text-slate-700 mb-4 absolute top-6 left-6 flex items-center gap-2">
             <PieChartIcon className="w-5 h-5 text-amber-500" />
             成本佔比分析 (總營收佔比 %)
@@ -2017,8 +2022,9 @@ const Analysis = ({ transactions, dateRange, setDateRange }) => {
                   data={costData}
                   cx="50%"
                   cy="50%"
+                  // CHART RADIUS FIX: outerRadius changed to 80
                   innerRadius={60}
-                  outerRadius={100}
+                  outerRadius={80}
                   paddingAngle={5}
                   dataKey="value"
                   label={({ name, value }) => {
