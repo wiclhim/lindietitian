@@ -74,7 +74,9 @@ import {
   Download,
   FileJson,
   AlertTriangle,
-  Receipt, // 新增圖標
+  Receipt,
+  Menu,
+  MoreHorizontal, // 用於手機版更多選單
 } from "lucide-react";
 
 // --- Firebase Configuration & Initialization ---
@@ -92,7 +94,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = "mumu-production"; // 固定專案名稱
+const appId = "mumu-production";
 
 // --- Constants ---
 const ACCOUNTS = [
@@ -100,7 +102,6 @@ const ACCOUNTS = [
   { id: "bank_esun", name: "玉山活存NT", type: "bank" },
 ];
 
-// 新增：票據憑證選項
 const PROOF_OPTIONS = [
   "無憑證",
   "電子發票",
@@ -301,7 +302,6 @@ const getMonthRange = () => {
 
 // --- Components ---
 
-// Auth Login/Register Component
 const AuthForm = ({ onLoginSuccess }) => {
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState("");
@@ -469,8 +469,8 @@ const Dialog = ({ config, onClose }) => {
   );
 };
 
-// Sidebar with Logout & BACKUP
-const Sidebar = ({
+// --- 重構 Sidebar 為響應式導覽 (Desktop: Sidebar, Mobile: Top + Bottom Bar) ---
+const Navigation = ({
   activeTab,
   setActiveTab,
   onImport,
@@ -482,11 +482,13 @@ const Sidebar = ({
   userEmail,
 }) => {
   const fileInputRef = useRef(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) onImport(file);
     e.target.value = null;
+    setMobileMenuOpen(false);
   };
 
   const handleLogout = async () => {
@@ -497,135 +499,188 @@ const Sidebar = ({
     }
   };
 
-  return (
-    <div className="w-full md:w-64 bg-slate-800 text-white flex flex-col h-auto md:h-screen sticky top-0 z-50 md:z-auto">
-      <div className="p-6 border-b border-slate-700">
-        <h1 className="text-xl font-bold flex items-center gap-2">
-          <Wallet className="w-6 h-6 text-emerald-400" />
-          木木營養食
-        </h1>
-        <p className="text-xs text-slate-400 mt-1">
-          雲端營收管理系統 v5.2 (憑證版)
-        </p>
-      </div>
+  const navItems = [
+    { id: "dashboard", icon: LayoutDashboard, label: "總覽" },
+    { id: "entry", icon: PlusCircle, label: "記帳" },
+    { id: "ledger", icon: Table2, label: "明細" },
+    { id: "analysis", icon: Calculator, label: "分析" },
+  ];
 
-      {/* User Info */}
-      <div className="p-4 bg-slate-700/50 flex items-center gap-3 border-b border-slate-700">
-        <div className="bg-slate-600 p-2 rounded-full">
-          <User className="w-4 h-4 text-slate-300" />
-        </div>
-        <div className="overflow-hidden">
-          <p className="text-xs text-slate-400">已登入</p>
-          <p className="text-sm font-medium truncate" title={userEmail}>
-            {userEmail}
+  // 系統功能選單內容
+  const SystemActions = () => (
+    <div className="flex flex-col gap-2">
+      <button
+        onClick={onExport}
+        disabled={exporting || importing || resetting}
+        className="flex items-center gap-3 px-4 py-3 rounded-lg w-full text-blue-300 hover:bg-slate-700 transition-colors border border-dashed border-slate-600 hover:border-blue-300"
+      >
+        {exporting ? (
+          <Loader2 className="w-5 h-5 animate-spin" />
+        ) : (
+          <Download className="w-5 h-5" />
+        )}
+        {exporting ? "備份中..." : "匯出備份"}
+      </button>
+
+      <button
+        onClick={() => !importing && !resetting && fileInputRef.current.click()}
+        disabled={importing || exporting || resetting}
+        className="flex items-center gap-3 px-4 py-3 rounded-lg w-full text-amber-300 hover:bg-slate-700 transition-colors border border-dashed border-slate-600 hover:border-amber-300"
+      >
+        {importing ? (
+          <Loader2 className="w-5 h-5 animate-spin" />
+        ) : (
+          <Upload className="w-5 h-5" />
+        )}
+        {importing ? "處理中" : "匯入資料"}
+      </button>
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        accept=".csv,.json"
+        className="hidden"
+      />
+
+      <button
+        onClick={() => {
+          onReset();
+          setMobileMenuOpen(false);
+        }}
+        disabled={importing || exporting || resetting}
+        className="flex items-center gap-3 px-4 py-3 rounded-lg w-full text-red-400 hover:bg-red-900/30 hover:text-red-200 transition-colors border border-dashed border-slate-600 hover:border-red-400"
+      >
+        {resetting ? (
+          <Loader2 className="w-5 h-5 animate-spin" />
+        ) : (
+          <AlertTriangle className="w-5 h-5" />
+        )}
+        {resetting ? "清除中..." : "清空資料庫"}
+      </button>
+
+      <button
+        onClick={handleLogout}
+        className="flex items-center gap-3 px-4 py-3 rounded-lg w-full text-slate-400 hover:bg-slate-700 transition-colors mt-2"
+      >
+        <LogOut className="w-5 h-5" />
+        登出系統
+      </button>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Desktop Sidebar (md:flex) */}
+      <div className="hidden md:flex w-64 bg-slate-800 text-white flex-col h-screen sticky top-0 z-50">
+        <div className="p-6 border-b border-slate-700">
+          <h1 className="text-xl font-bold flex items-center gap-2">
+            <Wallet className="w-6 h-6 text-emerald-400" />
+            木木營養食
+          </h1>
+          <p className="text-xs text-slate-400 mt-1">
+            雲端營收管理系統 v5.2 (憑證版)
           </p>
         </div>
+        <div className="p-4 bg-slate-700/50 flex items-center gap-3 border-b border-slate-700">
+          <div className="bg-slate-600 p-2 rounded-full">
+            <User className="w-4 h-4 text-slate-300" />
+          </div>
+          <div className="overflow-hidden">
+            <p className="text-xs text-slate-400">已登入</p>
+            <p className="text-sm font-medium truncate" title={userEmail}>
+              {userEmail}
+            </p>
+          </div>
+        </div>
+        <nav className="flex-1 p-4 space-y-2">
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              disabled={importing || exporting || resetting}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg w-full transition-colors ${
+                activeTab === item.id
+                  ? "bg-emerald-600 text-white shadow-lg"
+                  : "text-slate-300 hover:bg-slate-700"
+              } ${
+                importing || exporting || resetting
+                  ? "opacity-50 cursor-not-allowed"
+                  : ""
+              }`}
+            >
+              <item.icon className="w-5 h-5" />
+              {item.label}
+            </button>
+          ))}
+          <div className="pt-4 mt-4 border-t border-slate-700">
+            <SystemActions />
+          </div>
+        </nav>
       </div>
 
-      <nav className="flex-1 p-4 space-y-2 overflow-x-auto flex md:flex-col md:overflow-visible no-scrollbar">
-        {[
-          { id: "dashboard", icon: LayoutDashboard, label: "總覽儀表板" },
-          { id: "entry", icon: PlusCircle, label: "日記簿 (新增/修改)" },
-          { id: "ledger", icon: Table2, label: "帳戶明細表" },
-          { id: "analysis", icon: Calculator, label: "收支分析 (營收佔比)" },
-        ].map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setActiveTab(item.id)}
-            disabled={importing || exporting || resetting}
-            className={`flex items-center gap-3 px-4 py-3 rounded-lg w-full transition-colors whitespace-nowrap md:whitespace-normal shrink-0 ${
-              activeTab === item.id
-                ? "bg-emerald-600 text-white shadow-lg"
-                : "text-slate-300 hover:bg-slate-700"
-            } ${
-              importing || exporting || resetting
-                ? "opacity-50 cursor-not-allowed"
-                : ""
-            }`}
-          >
-            <item.icon className="w-5 h-5" />
-            {item.label}
-          </button>
-        ))}
-
-        <div className="pt-4 mt-4 md:border-t md:border-slate-700 shrink-0 flex flex-col gap-2">
-          {/* Export Button */}
-          <button
-            onClick={onExport}
-            disabled={exporting || importing || resetting}
-            className={`flex items-center gap-3 px-4 py-3 rounded-lg w-full text-blue-300 hover:bg-slate-700 transition-colors border border-dashed border-slate-600 hover:border-blue-300 whitespace-nowrap ${
-              importing || exporting || resetting
-                ? "opacity-50 cursor-not-allowed"
-                : ""
-            }`}
-          >
-            {exporting ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Download className="w-5 h-5" />
-            )}
-            {exporting ? "備份中..." : "匯出資料備份"}
-          </button>
-
-          {/* Import Button */}
-          <button
-            onClick={() =>
-              !importing && !resetting && fileInputRef.current.click()
-            }
-            disabled={importing || exporting || resetting}
-            className={`flex items-center gap-3 px-4 py-3 rounded-lg w-full text-amber-300 hover:bg-slate-700 transition-colors border border-dashed border-slate-600 hover:border-amber-300 whitespace-nowrap ${
-              importing || exporting || resetting
-                ? "opacity-50 cursor-not-allowed"
-                : ""
-            }`}
-          >
-            {importing ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Upload className="w-5 h-5" />
-            )}
-            {importing ? "處理中" : "匯入/還原資料"}
-          </button>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            accept=".csv,.json"
-            className="hidden"
-          />
-
-          {/* Reset Database Button (Dangerous Action) */}
-          <button
-            onClick={onReset}
-            disabled={importing || exporting || resetting}
-            className={`flex items-center gap-3 px-4 py-3 rounded-lg w-full text-red-400 hover:bg-red-900/30 hover:text-red-200 transition-colors border border-dashed border-slate-600 hover:border-red-400 whitespace-nowrap ${
-              importing || exporting || resetting
-                ? "opacity-50 cursor-not-allowed"
-                : ""
-            }`}
-          >
-            {resetting ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <AlertTriangle className="w-5 h-5" />
-            )}
-            {resetting ? "清除中..." : "清空/重置資料庫"}
-          </button>
-
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-3 rounded-lg w-full text-slate-400 hover:bg-slate-700 transition-colors whitespace-nowrap mt-4"
-          >
-            <LogOut className="w-5 h-5" />
-            登出系統
-          </button>
+      {/* Mobile Top Header (md:hidden) */}
+      <div className="md:hidden fixed top-0 left-0 right-0 bg-slate-800 text-white z-50 px-4 py-3 flex justify-between items-center shadow-md">
+        <div className="flex items-center gap-2">
+          <Wallet className="w-6 h-6 text-emerald-400" />
+          <h1 className="text-lg font-bold">木木營養食</h1>
         </div>
-      </nav>
-    </div>
+        <button
+          onClick={() => setMobileMenuOpen(true)}
+          className="p-2 text-slate-300 hover:text-white"
+        >
+          <Menu className="w-6 h-6" />
+        </button>
+      </div>
+
+      {/* Mobile Bottom Navigation (md:hidden) */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 pb-safe">
+        <div className="flex justify-around items-center">
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              disabled={importing || exporting || resetting}
+              className={`flex flex-col items-center gap-1 py-3 px-2 flex-1 transition-colors ${
+                activeTab === item.id
+                  ? "text-emerald-600"
+                  : "text-slate-400 hover:text-slate-600"
+              }`}
+            >
+              <item.icon
+                className={`w-6 h-6 ${
+                  activeTab === item.id ? "fill-current" : ""
+                }`}
+              />
+              <span className="text-xs font-medium">{item.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Mobile System Menu Overlay */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full sm:w-80 bg-slate-800 text-white rounded-t-2xl sm:rounded-xl p-6 shadow-2xl animate-in slide-in-from-bottom duration-300">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-bold flex items-center gap-2">
+                <User className="w-5 h-5" /> {userEmail}
+              </h3>
+              <button
+                onClick={() => setMobileMenuOpen(false)}
+                className="p-1 rounded-full hover:bg-slate-700"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <SystemActions />
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 
-// Dashboard (No changes)
+// Dashboard (Optimized for Mobile Padding)
 const Dashboard = ({ transactions, dateRange, setDateRange }) => {
   const [warning, setWarning] = useState("");
 
@@ -700,19 +755,19 @@ const Dashboard = ({ transactions, dateRange, setDateRange }) => {
   }, [transactions, dateRange]);
 
   return (
-    <div className="p-6 space-y-6 bg-slate-50 min-h-screen">
+    <div className="p-4 md:p-6 space-y-6 bg-slate-50 min-h-screen pb-24 md:pb-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <h2 className="text-2xl font-bold text-slate-800">營運總覽</h2>
-        <div className="flex flex-col items-end gap-2">
-          <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
-            <Calendar className="w-4 h-4 text-slate-400" />
+        <div className="flex flex-col w-full md:w-auto items-end gap-2">
+          <div className="flex w-full md:w-auto items-center gap-2 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
+            <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
             <input
               type="date"
               value={dateRange.start}
               onChange={(e) =>
                 setDateRange({ ...dateRange, start: e.target.value })
               }
-              className="outline-none text-sm text-slate-600 w-32"
+              className="outline-none text-sm text-slate-600 w-full md:w-32 bg-transparent"
             />
             <span className="text-slate-300">~</span>
             <input
@@ -721,19 +776,19 @@ const Dashboard = ({ transactions, dateRange, setDateRange }) => {
               onChange={(e) =>
                 setDateRange({ ...dateRange, end: e.target.value })
               }
-              className="outline-none text-sm text-slate-600 w-32"
+              className="outline-none text-sm text-slate-600 w-full md:w-32 bg-transparent"
             />
           </div>
           {warning && (
-            <div className="text-xs text-amber-600 flex items-center gap-1 bg-amber-50 px-2 py-1 rounded">
-              <AlertCircle className="w-3 h-3" /> {warning}
+            <div className="text-xs text-amber-600 flex items-center gap-1 bg-amber-50 px-2 py-1 rounded w-full md:w-auto">
+              <AlertCircle className="w-3 h-3 shrink-0" /> {warning}
             </div>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
           <p className="text-sm text-slate-500 mb-1">總資產 (台幣合計)</p>
           <h3 className="text-3xl font-bold text-slate-800">
             $
@@ -742,13 +797,13 @@ const Dashboard = ({ transactions, dateRange, setDateRange }) => {
             ).toLocaleString()}
           </h3>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
           <p className="text-sm text-slate-500 mb-1">玉山活存餘額</p>
           <h3 className="text-3xl font-bold text-emerald-600">
             ${data.accBalance["bank_esun"].toLocaleString()}
           </h3>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
           <p className="text-sm text-slate-500 mb-1">零用金餘額</p>
           <h3 className="text-3xl font-bold text-amber-600">
             ${data.accBalance["cash"].toLocaleString()}
@@ -756,17 +811,17 @@ const Dashboard = ({ transactions, dateRange, setDateRange }) => {
         </div>
       </div>
 
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-96">
+      <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-slate-200 h-80 md:h-96">
         <h3 className="text-lg font-bold text-slate-700 mb-4 flex items-center gap-2">
           <TrendingUp className="w-5 h-5 text-blue-600" />
-          本期營收趨勢 (總營收 vs 來源分析)
+          本期營收趨勢
         </h3>
         {data.chartData.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={data.chartData}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="date" />
-              <YAxis />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+              <YAxis tick={{ fontSize: 10 }} width={40} />
               <Tooltip
                 formatter={(value, name) => {
                   const map = {
@@ -779,7 +834,7 @@ const Dashboard = ({ transactions, dateRange, setDateRange }) => {
                   return [`$${value.toLocaleString()}`, map[name] || name];
                 }}
               />
-              <Legend />
+              <Legend wrapperStyle={{ fontSize: "12px" }} />
               <Bar dataKey="self" fill="#facc15" name="自取" />
               <Bar dataKey="panda" fill="#ec4899" name="Foodpanda" />
               <Bar dataKey="uber" fill="#4ade80" name="UberEat" />
@@ -804,7 +859,7 @@ const Dashboard = ({ transactions, dateRange, setDateRange }) => {
   );
 };
 
-// EntryForm (Added Proof Field)
+// EntryForm (Grid Optimized for Mobile)
 const EntryForm = ({
   user,
   appId,
@@ -821,7 +876,7 @@ const EntryForm = ({
     subcategory: "",
     amount: "",
     memo: "",
-    proof: "無憑證", // 新增預設值
+    proof: "無憑證",
   });
   const [items, setItems] = useState([{ id: 1, subcategory: "", amount: "" }]);
   const [submitting, setSubmitting] = useState(false);
@@ -842,7 +897,7 @@ const EntryForm = ({
       setFormData({
         ...initialData,
         amount: initialData.amount.toString(),
-        proof: initialData.proof || "無憑證", // 兼容舊資料
+        proof: initialData.proof || "無憑證",
       });
       if (
         initialData.details &&
@@ -932,7 +987,7 @@ const EntryForm = ({
           memo: "",
           subcategory: "",
           amount: "",
-          proof: "無憑證", // 重置憑證
+          proof: "無憑證",
         }));
       }
       setTimeout(() => setMessage(null), 3000);
@@ -944,16 +999,16 @@ const EntryForm = ({
   };
 
   return (
-    <div className="p-6 bg-slate-50 min-h-screen flex justify-center">
-      <div className="w-full max-w-2xl bg-white rounded-xl shadow-sm border border-slate-200 p-8">
-        <h2 className="text-2xl font-bold text-slate-800 mb-6 flex items-center justify-between">
+    <div className="p-4 md:p-6 bg-slate-50 min-h-screen flex justify-center pb-24 md:pb-6">
+      <div className="w-full max-w-2xl bg-white rounded-xl shadow-sm border border-slate-200 p-5 md:p-8">
+        <h2 className="text-xl md:text-2xl font-bold text-slate-800 mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
             {initialData ? (
               <Edit className="w-6 h-6 text-amber-500" />
             ) : (
               <PlusCircle className="w-6 h-6 text-blue-600" />
             )}
-            {initialData ? "修改日記簿紀錄" : "新增日記簿"}
+            {initialData ? "修改紀錄" : "新增紀錄"}
           </div>
           {initialData && (
             <button
@@ -977,8 +1032,8 @@ const EntryForm = ({
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-2 gap-6">
+        <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 日期
@@ -990,7 +1045,7 @@ const EntryForm = ({
                 onChange={(e) =>
                   setFormData({ ...formData, date: e.target.value })
                 }
-                className="w-full p-3 border rounded-lg"
+                className="w-full p-3 border rounded-lg bg-white"
               />
             </div>
             <div>
@@ -1008,11 +1063,11 @@ const EntryForm = ({
                         { id: Date.now(), subcategory: "", amount: "" },
                       ]);
                     }}
-                    className={`flex-1 py-2 rounded-md text-sm font-medium ${
+                    className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${
                       formData.type === t
                         ? t === "income"
-                          ? "bg-emerald-500 text-white"
-                          : "bg-red-500 text-white"
+                          ? "bg-emerald-500 text-white shadow-sm"
+                          : "bg-red-500 text-white shadow-sm"
                         : "text-slate-500"
                     }`}
                   >
@@ -1023,7 +1078,7 @@ const EntryForm = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 帳戶
@@ -1042,7 +1097,6 @@ const EntryForm = ({
                 ))}
               </select>
             </div>
-            {/* 新增憑證選擇欄位 */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
                 <Receipt className="w-4 h-4" /> 票據憑證
@@ -1052,7 +1106,7 @@ const EntryForm = ({
                 onChange={(e) =>
                   setFormData({ ...formData, proof: e.target.value })
                 }
-                className="w-full p-3 border rounded-lg bg-white border-blue-200 text-blue-800"
+                className="w-full p-3 border rounded-lg bg-white border-blue-200 text-blue-800 font-medium"
               >
                 {PROOF_OPTIONS.map((opt) => (
                   <option key={opt} value={opt}>
@@ -1089,16 +1143,18 @@ const EntryForm = ({
             </select>
           </div>
 
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <div className="bg-slate-50 p-3 md:p-4 rounded-xl border border-slate-200">
             <div className="flex justify-between items-center mb-2">
               <label className="text-sm font-medium text-slate-700">
                 明細 (總額: ${totalAmount.toLocaleString()})
               </label>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {items.map((item, idx) => (
                 <div key={item.id} className="flex gap-2 items-center">
-                  <div className="w-6 text-xs text-slate-400">{idx + 1}.</div>
+                  <div className="w-6 text-xs text-slate-400 font-mono">
+                    {idx + 1}.
+                  </div>
                   <div className="flex-1">
                     <input
                       list={`subs-${item.id}`}
@@ -1113,7 +1169,7 @@ const EntryForm = ({
                           )
                         )
                       }
-                      className="w-full p-2 border rounded-lg text-sm"
+                      className="w-full p-2 border rounded-lg text-sm bg-white"
                     />
                     <datalist id={`subs-${item.id}`}>
                       {selectedCatObj?.subs.map((s, i) => (
@@ -1134,7 +1190,7 @@ const EntryForm = ({
                         )
                       )
                     }
-                    className="w-24 p-2 border rounded-lg text-sm text-right"
+                    className="w-24 p-2 border rounded-lg text-sm text-right bg-white font-medium"
                   />
                   <button
                     type="button"
@@ -1142,9 +1198,9 @@ const EntryForm = ({
                       items.length > 1 &&
                       setItems((prev) => prev.filter((x) => x.id !== item.id))
                     }
-                    className="text-slate-400 hover:text-red-500"
+                    className="text-slate-400 hover:text-red-500 p-1"
                   >
-                    <X className="w-4 h-4" />
+                    <X className="w-5 h-5" />
                   </button>
                 </div>
               ))}
@@ -1157,9 +1213,9 @@ const EntryForm = ({
                   { id: Date.now(), subcategory: "", amount: "" },
                 ])
               }
-              className="mt-3 text-sm text-blue-600 flex items-center gap-1"
+              className="mt-4 w-full py-2 border border-dashed border-blue-300 rounded-lg text-sm text-blue-600 flex items-center justify-center gap-1 hover:bg-blue-50 transition-colors"
             >
-              <Plus className="w-4 h-4" /> 新增一列
+              <Plus className="w-4 h-4" /> 新增一列明細
             </button>
           </div>
 
@@ -1186,7 +1242,7 @@ const EntryForm = ({
           <button
             type="submit"
             disabled={submitting}
-            className={`w-full py-4 rounded-xl text-white font-bold shadow-md ${
+            className={`w-full py-4 rounded-xl text-white font-bold shadow-md active:scale-95 transition-transform ${
               initialData ? "bg-amber-500" : "bg-blue-600"
             }`}
           >
@@ -1198,7 +1254,7 @@ const EntryForm = ({
   );
 };
 
-// Ledger (Added Proof Column)
+// Ledger (Mobile Card View + Desktop Table View)
 const Ledger = ({
   transactions,
   onDelete,
@@ -1253,18 +1309,18 @@ const Ledger = ({
   }, [filtered]);
 
   return (
-    <div className="p-6 bg-slate-50 min-h-screen">
+    <div className="p-4 md:p-6 bg-slate-50 min-h-screen pb-24 md:pb-6">
       <div className="flex flex-col gap-4 mb-6">
         <div className="flex justify-between items-center flex-wrap gap-4">
           <div>
-            <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+            <h2 className="text-xl md:text-2xl font-bold text-slate-800 flex items-center gap-2">
               帳戶明細表
-              <span className="text-sm font-normal text-slate-500 bg-white px-2 py-1 rounded-full border border-slate-200">
-                (資料庫共有 {transactions.length} 筆資料)
+              <span className="text-xs md:text-sm font-normal text-slate-500 bg-white px-2 py-1 rounded-full border border-slate-200">
+                ({transactions.length}筆)
               </span>
             </h2>
-            <p className="text-sm text-slate-500 mt-1">
-              顯示範圍: {dateRange.start} ~ {dateRange.end}
+            <p className="text-xs md:text-sm text-slate-500 mt-1">
+              範圍: {dateRange.start} ~ {dateRange.end}
             </p>
           </div>
           {(dateRange.start ||
@@ -1276,23 +1332,24 @@ const Ledger = ({
                 setDateRange({ start: "", end: "" });
                 setFilter({ category: "", account: "", search: "" });
               }}
-              className="text-sm text-red-500 flex items-center gap-1 border border-red-200 px-3 py-1 rounded-full hover:bg-red-50"
+              className="text-xs md:text-sm text-red-500 flex items-center gap-1 border border-red-200 px-3 py-1 rounded-full hover:bg-red-50"
             >
-              <X className="w-4 h-4" /> 清除所有篩選 (顯示全部)
+              <X className="w-4 h-4" /> 清除篩選
             </button>
           )}
         </div>
 
-        <div className="flex flex-wrap gap-3 items-center">
-          <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-200">
-            <Calendar className="w-4 h-4 text-slate-400" />
+        {/* Filter Controls */}
+        <div className="flex flex-col md:flex-row gap-2">
+          <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-200 w-full md:w-auto">
+            <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
             <input
               type="date"
               value={dateRange.start}
               onChange={(e) =>
                 setDateRange({ ...dateRange, start: e.target.value })
               }
-              className="text-sm outline-none w-32"
+              className="text-sm outline-none w-full bg-transparent"
             />
             <span className="text-slate-300">~</span>
             <input
@@ -1301,53 +1358,158 @@ const Ledger = ({
               onChange={(e) =>
                 setDateRange({ ...dateRange, end: e.target.value })
               }
-              className="text-sm outline-none w-32"
+              className="text-sm outline-none w-full bg-transparent"
             />
           </div>
-          <select
-            value={filter.account}
-            onChange={(e) => setFilter({ ...filter, account: e.target.value })}
-            className="p-2 border rounded-lg text-sm bg-white"
-          >
-            <option value="">所有帳戶</option>
-            {ACCOUNTS.map((a) => (
-              <option key={a.id} value={a.name}>
-                {a.name}
-              </option>
-            ))}
-          </select>
+          <div className="flex gap-2 w-full md:w-auto">
+            <select
+              value={filter.account}
+              onChange={(e) =>
+                setFilter({ ...filter, account: e.target.value })
+              }
+              className="p-2 border rounded-lg text-sm bg-white flex-1 md:flex-none"
+            >
+              <option value="">所有帳戶</option>
+              {ACCOUNTS.map((a) => (
+                <option key={a.id} value={a.name}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
 
-          <select
-            value={filter.category}
-            onChange={(e) => setFilter({ ...filter, category: e.target.value })}
-            className="p-2 border rounded-lg text-sm bg-white w-48"
-          >
-            <option value="">所有科目 (全選)</option>
-            <option value="ALL_INCOME" className="text-emerald-600 font-bold">
-              【只顯示收入】
-            </option>
-            <option value="ALL_EXPENSE" className="text-red-500 font-bold">
-              【只顯示支出】
-            </option>
-            <optgroup label="--- 收入科目 ---">
-              {CATEGORIES.income.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.code} {c.name}
-                </option>
-              ))}
-            </optgroup>
-            <optgroup label="--- 支出科目 ---">
-              {CATEGORIES.expense.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.code} {c.name}
-                </option>
-              ))}
-            </optgroup>
-          </select>
+            <select
+              value={filter.category}
+              onChange={(e) =>
+                setFilter({ ...filter, category: e.target.value })
+              }
+              className="p-2 border rounded-lg text-sm bg-white flex-1 md:w-48"
+            >
+              <option value="">所有科目</option>
+              <option value="ALL_INCOME" className="text-emerald-600 font-bold">
+                【只顯示收入】
+              </option>
+              <option value="ALL_EXPENSE" className="text-red-500 font-bold">
+                【只顯示支出】
+              </option>
+              <optgroup label="--- 收入科目 ---">
+                {CATEGORIES.income.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code} {c.name}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="--- 支出科目 ---">
+                {CATEGORIES.expense.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.code} {c.name}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+          </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      {/* Summary Cards for Mobile */}
+      <div className="md:hidden grid grid-cols-3 gap-2 mb-4">
+        <div className="bg-emerald-50 p-2 rounded-lg text-center border border-emerald-100">
+          <p className="text-xs text-emerald-600 mb-1">收入</p>
+          <p className="font-bold text-emerald-700 text-sm">
+            ${summary.income.toLocaleString()}
+          </p>
+        </div>
+        <div className="bg-red-50 p-2 rounded-lg text-center border border-red-100">
+          <p className="text-xs text-red-500 mb-1">支出</p>
+          <p className="font-bold text-red-600 text-sm">
+            ${summary.expense.toLocaleString()}
+          </p>
+        </div>
+        <div className="bg-blue-50 p-2 rounded-lg text-center border border-blue-100">
+          <p className="text-xs text-blue-500 mb-1">淨利</p>
+          <p className="font-bold text-blue-600 text-sm">
+            ${summary.profit.toLocaleString()}
+          </p>
+        </div>
+      </div>
+
+      {/* MOBILE CARD VIEW (md:hidden) */}
+      <div className="md:hidden space-y-3">
+        {filtered.map((t) => (
+          <div
+            key={t.id}
+            className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 active:scale-[0.99] transition-transform"
+          >
+            <div className="flex justify-between items-start mb-2">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-800 text-lg">
+                  {t.date.substring(5)}
+                </span>
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full ${
+                    t.account.includes("玉山")
+                      ? "bg-green-100 text-green-700"
+                      : "bg-amber-100 text-amber-700"
+                  }`}
+                >
+                  {t.account}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => onEdit(t)}
+                  className="text-slate-400 p-1"
+                >
+                  <Edit className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => onDelete(t.id)}
+                  className="text-red-400 p-1"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center mb-2">
+              <div>
+                <div className="font-medium text-slate-800">
+                  {t.subcategory}
+                </div>
+                <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                  <span className="bg-slate-100 px-1 rounded">
+                    {t.categoryName}
+                  </span>
+                  {t.proof && t.proof !== "無憑證" && (
+                    <span className="bg-blue-50 text-blue-600 px-1 rounded border border-blue-100">
+                      {t.proof}
+                    </span>
+                  )}
+                  {t.memo && <span>• {t.memo}</span>}
+                </div>
+              </div>
+              <div
+                className={`text-lg font-bold ${
+                  NON_PROFIT_CODES.includes(t.categoryCode)
+                    ? "text-slate-400"
+                    : t.type === "income"
+                    ? "text-emerald-600"
+                    : "text-red-500"
+                }`}
+              >
+                {t.type === "income" ? "+" : "-"}${t.amount.toLocaleString()}
+              </div>
+            </div>
+          </div>
+        ))}
+        {filtered.length === 0 && (
+          <div className="text-center py-10 text-slate-400 bg-white rounded-xl border border-dashed border-slate-200">
+            無符合資料
+          </div>
+        )}
+      </div>
+
+      {/* DESKTOP TABLE VIEW (hidden md:block) */}
+      <div className="hidden md:block bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead className="bg-slate-50 border-b border-slate-200 sticky top-0">
@@ -1464,22 +1626,6 @@ const Ledger = ({
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan="8" className="p-12 text-center text-slate-400">
-                    <div className="flex flex-col items-center">
-                      <FileText className="w-12 h-12 mb-2 opacity-20" />
-                      <p>沒有找到符合條件的紀錄</p>
-                      {transactions.length > 0 && (
-                        <p className="text-sm text-amber-500 mt-1">
-                          系統中有 {transactions.length}{" "}
-                          筆資料，請按上方「清除所有篩選」按鈕。
-                        </p>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
@@ -1515,7 +1661,7 @@ const Ledger = ({
   );
 };
 
-// --- Analysis Component (Fixed) ---
+// Analysis Component (Mobile Padding Optimization)
 const Analysis = ({ transactions, dateRange, setDateRange }) => {
   // 1. 總計與圓餅圖數據計算
   const { totalRevenue, totalExpense, costData, revStats, filteredCount } =
@@ -1721,7 +1867,7 @@ const Analysis = ({ transactions, dateRange, setDateRange }) => {
   }, [transactions, dateRange]);
 
   return (
-    <div className="p-6 bg-slate-50 min-h-screen">
+    <div className="p-4 md:p-6 bg-slate-50 min-h-screen pb-24 md:pb-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
@@ -1742,15 +1888,15 @@ const Analysis = ({ transactions, dateRange, setDateRange }) => {
             </span>
           </p>
         </div>
-        <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-slate-200">
-          <Calendar className="w-4 h-4 text-slate-400" />
+        <div className="flex w-full md:w-auto items-center gap-2 bg-white p-2 rounded-lg border border-slate-200">
+          <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
           <input
             type="date"
             value={dateRange.start}
             onChange={(e) =>
               setDateRange({ ...dateRange, start: e.target.value })
             }
-            className="text-sm outline-none w-32"
+            className="text-sm outline-none w-full md:w-32 bg-transparent"
           />
           <span className="text-slate-300">~</span>
           <input
@@ -1759,7 +1905,7 @@ const Analysis = ({ transactions, dateRange, setDateRange }) => {
             onChange={(e) =>
               setDateRange({ ...dateRange, end: e.target.value })
             }
-            className="text-sm outline-none w-32"
+            className="text-sm outline-none w-full md:w-32 bg-transparent"
           />
         </div>
       </div>
@@ -1823,10 +1969,10 @@ const Analysis = ({ transactions, dateRange, setDateRange }) => {
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={monthlyData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="month" />
-                  <YAxis />
+                  <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} width={40} />
                   <Tooltip formatter={(v) => `$${v.toLocaleString()}`} />
-                  <Legend />
+                  <Legend wrapperStyle={{ fontSize: "12px" }} />
                   <Bar
                     dataKey="income"
                     name="總營收"
@@ -2021,7 +2167,7 @@ export default function App() {
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [resetting, setResetting] = useState(false); // New resetting state
+  const [resetting, setResetting] = useState(false);
   const [dialogConfig, setDialogConfig] = useState({
     show: false,
     type: "alert",
@@ -2041,7 +2187,7 @@ export default function App() {
 
   useEffect(() => {
     if (!user) {
-      setTransactions([]); // 登出時清空資料
+      setTransactions([]);
       return;
     }
     const q = query(
@@ -2074,7 +2220,6 @@ export default function App() {
     });
   };
 
-  // --- NEW: Reset Database Function (Clear All) ---
   const handleReset = async () => {
     if (!user) return;
     setDialogConfig({
@@ -2153,7 +2298,6 @@ export default function App() {
     });
   };
 
-  // --- NEW: Export Backup Function ---
   const handleExport = async () => {
     if (!user) return;
     setExporting(true);
@@ -2163,7 +2307,6 @@ export default function App() {
       );
       const snapshot = await getDocs(q);
       const data = snapshot.docs.map((doc) => {
-        // Exclude ID to allow clean import later (new IDs will be generated)
         const { id, ...rest } = doc.data();
         return rest;
       });
@@ -2206,7 +2349,6 @@ export default function App() {
     if (!user) return;
     setImporting(true);
 
-    // NEW: Handle JSON Restore
     if (file.name.endsWith(".json")) {
       const reader = new FileReader();
       reader.onload = async (e) => {
@@ -2230,7 +2372,6 @@ export default function App() {
                 "transactions"
               )
             );
-            // Ensure legacy data has required fields
             if (!item.amount && !item.date) continue;
 
             batch.set(ref, {
@@ -2269,16 +2410,13 @@ export default function App() {
       return;
     }
 
-    // ORIGINAL: Handle CSV Import
     const reader = new FileReader();
     reader.onload = async (e) => {
       try {
         const buffer = e.target.result;
         let text = "";
-
         const decoderUtf8 = new TextDecoder("utf-8");
         const textUtf8 = decoderUtf8.decode(buffer);
-
         if (textUtf8.includes("收付日") || textUtf8.includes("傳票")) {
           text = textUtf8;
         } else {
@@ -2440,7 +2578,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 font-sans">
-      <Sidebar
+      <Navigation
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onImport={handleImport}
@@ -2451,7 +2589,7 @@ export default function App() {
         resetting={resetting}
         userEmail={user.email}
       />
-      <main className="flex-1 overflow-y-auto h-screen relative">
+      <main className="flex-1 overflow-y-auto h-screen relative scroll-smooth">
         {activeTab === "dashboard" && (
           <Dashboard
             transactions={transactions}
