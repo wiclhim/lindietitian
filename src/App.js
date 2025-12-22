@@ -578,7 +578,7 @@ const Navigation = ({
             木木營養食
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            雲端營收管理系統 v5.3 (Mobile Fix)
+            雲端營收管理系統 v5.4 (Chart Fix)
           </p>
         </div>
         <div className="p-4 bg-slate-700/50 flex items-center gap-3 border-b border-slate-700">
@@ -729,19 +729,39 @@ const Dashboard = ({ transactions, dateRange, setDateRange }) => {
           other: 0,
         };
 
-      const amt = parseFloat(t.amount) || 0;
+      const totalAmt = parseFloat(t.amount) || 0;
       if (t.type === "income") {
-        grouped[t.date].total += amt;
-        const sub = (t.subcategory || t.memo || "").toLowerCase();
+        grouped[t.date].total += totalAmt;
 
-        if (sub.includes("foodpanda")) {
-          grouped[t.date].panda += amt;
-        } else if (sub.includes("uber")) {
-          grouped[t.date].uber += amt;
-        } else if (sub.includes("自取") || sub.includes("內用")) {
-          grouped[t.date].self += amt;
+        // FIXED LOGIC: Iterate details if available
+        if (t.details && Array.isArray(t.details) && t.details.length > 0) {
+          t.details.forEach((item) => {
+            const itemAmt = parseFloat(item.amount) || 0;
+            const itemSub = (item.subcategory || "").toLowerCase();
+
+            if (itemSub.includes("foodpanda")) {
+              grouped[t.date].panda += itemAmt;
+            } else if (itemSub.includes("uber")) {
+              grouped[t.date].uber += itemAmt;
+            } else if (itemSub.includes("自取") || itemSub.includes("內用")) {
+              grouped[t.date].self += itemAmt;
+            } else {
+              grouped[t.date].other += itemAmt;
+            }
+          });
         } else {
-          grouped[t.date].other += amt;
+          // Fallback logic for legacy data or simple entries
+          const sub = (t.subcategory || t.memo || "").toLowerCase();
+
+          if (sub.includes("foodpanda")) {
+            grouped[t.date].panda += totalAmt;
+          } else if (sub.includes("uber")) {
+            grouped[t.date].uber += totalAmt;
+          } else if (sub.includes("自取") || sub.includes("內用")) {
+            grouped[t.date].self += totalAmt;
+          } else {
+            grouped[t.date].other += totalAmt;
+          }
         }
       }
     });
@@ -836,10 +856,10 @@ const Dashboard = ({ transactions, dateRange, setDateRange }) => {
                 }}
               />
               <Legend wrapperStyle={{ fontSize: "12px" }} />
-              <Bar dataKey="self" fill="#facc15" name="自取" />
-              <Bar dataKey="panda" fill="#ec4899" name="Foodpanda" />
-              <Bar dataKey="uber" fill="#4ade80" name="UberEat" />
-              <Bar dataKey="other" fill="#94a3b8" name="其他" />
+              <Bar dataKey="self" fill="#facc15" name="自取" stackId="a" />
+              <Bar dataKey="panda" fill="#ec4899" name="Foodpanda" stackId="a" />
+              <Bar dataKey="uber" fill="#4ade80" name="UberEat" stackId="a" />
+              <Bar dataKey="other" fill="#94a3b8" name="其他" stackId="a" />
               <Line
                 type="monotone"
                 dataKey="total"
