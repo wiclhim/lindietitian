@@ -291,13 +291,11 @@ const getCategoryNameByCode = (code) => {
 
 const getMonthRange = () => {
   const date = new Date();
-  const firstDay = new Date(date.getFullYear(), date.getMonth(), 1)
-    .toISOString()
-    .split("T")[0];
-  const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0)
-    .toISOString()
-    .split("T")[0];
-  return { start: firstDay, end: lastDay };
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const lastDay = new Date(year, date.getMonth() + 1, 0).getDate();
+  // 使用本地日期，避免轉成 UTC 時讓月初和月底往前偏移一天。
+  return { start: `${year}-${month}-01`, end: `${year}-${month}-${lastDay}` };
 };
 
 // --- Components ---
